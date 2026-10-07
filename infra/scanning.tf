@@ -12,6 +12,13 @@
 resource "aws_inspector2_enabler" "this" {
   account_ids    = [data.aws_caller_identity.current.account_id]
   resource_types = ["EC2", "ECR", "LAMBDA"]
+
+  # Disabling Inspector across three resource types can take well over the
+  # provider's 5-minute default; observed during teardown.
+  timeouts {
+    create = "15m"
+    delete = "20m"
+  }
 }
 
 # Security Hub as the aggregation layer. Inspector findings arrive through the
