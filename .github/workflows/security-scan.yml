@@ -1,0 +1,79 @@
+name: Security Scan
+
+# Pre-deployment gate: every push and pull request is scanned before anything
+# can reach AWS. Findings are published to the GitHub Security tab (SARIF),
+# and the job fails if a blocking severity is found.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF to the Security tab
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.74.0   # pinned scanner version
+  APP_IMAGE: vuln-demo:${{ github.sha }}
+
+jobs:
+  image-scan:
+    name: Container image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build image
+        run: docker build -t "$APP_IMAGE" app/
+
+      - name: Trivy image scan (SARIF report, all severities)
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/work -w /work \
+            "$TRIVY_IMAGE" image \
+            --format sarif --output trivy-image.sarif \
+            "$APP_IMAGE"
+
+      - name: Upload image findings to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Gate - fail on fixable CRITICAL vulnerabilities
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            "$TRIVY_IMAGE" image \
+            --severity CRITICAL --ignore-unfixed \
+            --exit-code 1 --format table \
+            "$APP_IMAGE"
+
+  config-scan:
+    name: IaC / Dockerfile misconfiguration scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Trivy config scan (SARIF report)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work \
+            "$TRIVY_IMAGE" config \
+            --format sarif --output trivy-config.sarif .
+
+      - name: Upload config findings to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+      - name: Gate - fail on HIGH/CRITICAL misconfigurations
+        run: |
+          docker run --rm -v "$PWD":/work -w /work \
+            "$TRIVY_IMAGE" config \
+            --severity HIGH,CRITICAL --exit-code 1 --format table .
