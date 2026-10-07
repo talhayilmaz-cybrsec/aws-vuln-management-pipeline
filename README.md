@@ -6,8 +6,9 @@ scanned continuously with Amazon Inspector, and a Python risk engine
 prioritizes CVEs using CVSS, EPSS, and the CISA Known Exploited
 Vulnerabilities (KEV) catalog instead of CVSS alone.
 
-> **Status:** Phase 1 (pre-deployment scanning) complete. AWS runtime scanning,
-> risk engine, and reporting in progress.
+> **Status:** Phase 1 (pre-deployment scanning) complete. Phase 2 (AWS
+> infrastructure) code complete, deployment in progress. Risk engine and
+> reporting planned.
 
 ## Architecture
 
@@ -35,7 +36,7 @@ Vulnerabilities (KEV) catalog instead of CVSS alone.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Pre-deployment scanning: Trivy in GitHub Actions, SARIF upload, build gates | Done |
-| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Planned |
+| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Code complete |
 | 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Planned |
 | 4 | Weekly metrics report: severity counts, SLA breaches, MTTR | Planned |
 | 5 | Documentation, screenshots, teardown | Planned |
@@ -66,6 +67,32 @@ image so the pipeline has real findings to act on:
 The first pipeline run is expected to **fail**. Remediating the image
 (supported base image, patched dependencies, non-root user) makes it pass,
 demonstrating the gate end to end.
+
+## Phase 2: AWS infrastructure
+
+Two Terraform stacks:
+
+| Stack | Deployed by | Creates |
+|---|---|---|
+| [`bootstrap/`](bootstrap/) | Once, manually, from AWS CloudShell | S3 state bucket (versioned, encrypted, TLS-only), GitHub OIDC provider, deploy role |
+| [`infra/`](infra/) | GitHub Actions ([`deploy-infra.yml`](.github/workflows/deploy-infra.yml)) | Inspector (EC2/ECR/Lambda), Security Hub, ECR, KMS key, SNS alerts, DynamoDB findings table, scan target EC2 |
+
+### Security decisions
+
+- **No long-lived AWS keys.** Bootstrap runs in CloudShell with the console
+  session's temporary credentials. GitHub Actions gets short-lived credentials
+  through OIDC, and the role trusts only this repository's `main` branch.
+- **Least privilege for the pipeline.** The deploy role has `PowerUserAccess`
+  (which excludes IAM) plus IAM permissions scoped to `vulnpipe-*` roles only,
+  so the pipeline cannot create or modify any other identity.
+- **Encryption at rest with a customer managed KMS key** (rotation enabled)
+  for alerts and findings data.
+- **Locked-down scan target.** The intentionally vulnerable EC2 instance has no
+  inbound rules, no SSH key, IMDSv2 only, and an encrypted disk. It is
+  vulnerable on paper (package CVEs) but not reachable.
+- **The infrastructure code passes the same gate as the app.** Trivy scans the
+  Terraform on every push. Accepted risks are suppressed inline with a written
+  justification (`#trivy:ignore`), never silently.
 
 ## Tooling
 

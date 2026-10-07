@@ -53,6 +53,24 @@ jobs:
             --exit-code 1 --format table \
             "$APP_IMAGE"
 
+  terraform-validate:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform fmt -check -recursive -diff
+
+      - name: Validate bootstrap stack
+        working-directory: bootstrap
+        run: terraform init -backend=false -input=false && terraform validate
+
+      - name: Validate infra stack
+        working-directory: infra
+        run: terraform init -backend=false -input=false && terraform validate
+
   config-scan:
     name: IaC / Dockerfile misconfiguration scan
     runs-on: ubuntu-latest
