@@ -19,7 +19,10 @@ variable "alert_email" {
 variable "deploy_scan_target" {
   description = "Deploy the intentionally vulnerable EC2 instance Inspector scans. Set false to remove it."
   type        = bool
-  default     = true
+  # Was true while collecting findings. Set to false to decommission the
+  # instance: Inspector then closes its findings, and the risk engine records
+  # closed_at so the report can measure time to remediate.
+  default = false
 }
 
 variable "target_ami_ssm_parameter" {
