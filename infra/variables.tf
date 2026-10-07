@@ -45,3 +45,9 @@ variable "alert_priorities" {
   type        = list(string)
   default     = ["P1"]
 }
+
+variable "report_schedule" {
+  description = "When the metrics report runs (EventBridge expression, UTC). Default: Mondays 13:00 UTC = 9:00 New York (EDT)."
+  type        = string
+  default     = "cron(0 13 ? * MON *)"
+}

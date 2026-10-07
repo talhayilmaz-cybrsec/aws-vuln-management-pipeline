@@ -6,8 +6,8 @@ scanned continuously with Amazon Inspector, and a Python risk engine
 prioritizes CVEs using CVSS, EPSS, and the CISA Known Exploited
 Vulnerabilities (KEV) catalog instead of CVSS alone.
 
-> **Status:** Phases 1-2 deployed. Phase 3 (risk engine) code complete.
-> Reporting planned.
+> **Status:** Phases 1-3 deployed and verified end to end. Phase 4 (reporting)
+> code complete.
 
 ## Architecture
 
@@ -36,8 +36,8 @@ Vulnerabilities (KEV) catalog instead of CVSS alone.
 |---|---|---|
 | 1 | Pre-deployment scanning: Trivy in GitHub Actions, SARIF upload, build gates | Done |
 | 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Deployed |
-| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Code complete |
-| 4 | Weekly metrics report: severity counts, SLA breaches, MTTR | Planned |
+| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Deployed |
+| 4 | Weekly metrics report: open by priority, SLA compliance, MTTR | Code complete |
 | 5 | Documentation, screenshots, teardown | Planned |
 
 ## Phase 1: Pre-deployment scanning
@@ -140,6 +140,24 @@ priorities are Terraform variables.
 
 The scoring and handler logic are covered by unit tests that run on every
 push, with no AWS account or network access needed.
+
+## Phase 4: Weekly metrics report
+
+Code: [`lambda/report/report.py`](lambda/report/report.py)
+
+Every Monday an EventBridge schedule runs a second Lambda that reads the
+findings table and emails the program-level metrics:
+
+| Metric | Why it matters |
+|---|---|
+| Open findings by priority, and how many are in CISA KEV | Current exposure at a glance |
+| SLA compliance and the list of past-due findings | Are we meeting our remediation commitments? |
+| Findings due in the next 7 days | What the team should work on this week |
+| MTTR (mean time to remediate), overall and per priority | Are we getting faster? The KPI auditors and managers track |
+| Top open findings by risk score | Where to start |
+
+MTTR is measured from Inspector's *first observed* time to the moment
+Inspector closes the finding, both recorded by the risk engine.
 
 ## Tooling
 
