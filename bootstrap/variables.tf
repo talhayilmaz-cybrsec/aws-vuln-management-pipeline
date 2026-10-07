@@ -21,3 +21,15 @@ variable "github_repo" {
   type        = string
   default     = "aws-vuln-management-pipeline"
 }
+
+variable "github_owner_id" {
+  description = "Immutable numeric ID of the GitHub account (appears in the OIDC subject claim)"
+  type        = string
+  default     = "338269886"
+}
+
+variable "github_repo_id" {
+  description = "Immutable numeric ID of the repository (appears in the OIDC subject claim)"
+  type        = string
+  default     = "1409374658"
+}

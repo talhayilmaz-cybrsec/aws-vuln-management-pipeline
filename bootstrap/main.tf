@@ -38,7 +38,11 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id   = data.aws_caller_identity.current.account_id
   state_bucket = "${var.project}-tfstate-${local.account_id}"
-  github_sub   = "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/main"
+
+  # GitHub's OIDC subject includes immutable numeric IDs next to the names.
+  # Matching on the IDs means a deleted-and-recreated account or repository
+  # with the same name can NOT inherit this role's trust.
+  github_sub = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:ref:refs/heads/main"
 }
 
 # =============================================================================
