@@ -7,6 +7,7 @@ __pycache__/
 *.sarif
 
 # Terraform
+.build/
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -16,3 +17,6 @@ crash.log
 
 # OS
 .DS_Store
+
+# Tests
+.pytest_cache/

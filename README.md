@@ -6,9 +6,8 @@ scanned continuously with Amazon Inspector, and a Python risk engine
 prioritizes CVEs using CVSS, EPSS, and the CISA Known Exploited
 Vulnerabilities (KEV) catalog instead of CVSS alone.
 
-> **Status:** Phase 1 (pre-deployment scanning) complete. Phase 2 (AWS
-> infrastructure) code complete, deployment in progress. Risk engine and
-> reporting planned.
+> **Status:** Phases 1-2 deployed. Phase 3 (risk engine) code complete.
+> Reporting planned.
 
 ## Architecture
 
@@ -36,8 +35,8 @@ Vulnerabilities (KEV) catalog instead of CVSS alone.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Pre-deployment scanning: Trivy in GitHub Actions, SARIF upload, build gates | Done |
-| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Code complete |
-| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Planned |
+| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Deployed |
+| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Code complete |
 | 4 | Weekly metrics report: severity counts, SLA breaches, MTTR | Planned |
 | 5 | Documentation, screenshots, teardown | Planned |
 
@@ -90,15 +89,61 @@ Two Terraform stacks:
 - **Locked-down scan target.** The intentionally vulnerable EC2 instance has no
   inbound rules, no SSH key, IMDSv2 only, and an encrypted disk. It is
   vulnerable on paper (package CVEs) but not reachable.
+- **OIDC trust pinned to immutable IDs.** GitHub's token subject includes the
+  numeric account and repository IDs, and the role trusts those, so a deleted
+  and re-created account or repository with the same name cannot assume it.
 - **The infrastructure code passes the same gate as the app.** Trivy scans the
   Terraform on every push. Accepted risks are suppressed inline with a written
   justification (`#trivy:ignore`), never silently.
 
+## Phase 3: Risk engine
+
+Code: [`lambda/risk_engine/`](lambda/risk_engine/) · Tests: [`tests/`](tests/)
+
+Every Inspector finding event (created, updated, closed) triggers a Python
+Lambda through EventBridge. CVSS alone measures how bad a vulnerability
+*could* be; most "critical" CVEs are never exploited. The engine answers
+three questions and combines them into a 0-100 score:
+
+| Question | Signal | Points |
+|---|---|---|
+| How bad if exploited? | CVSS base score (NVD v3 preferred) | 0-40 |
+| Is it being exploited? | **CISA KEV** (confirmed in the wild) = max; otherwise **EPSS** probability, plus public exploit availability | 0-35 |
+| Does this asset matter? | Asset tags `vulnpipe:exposure` and `vulnpipe:criticality` | 0-25 |
+
+| Priority | Rule | Remediation SLA |
+|---|---|---|
+| P1 | In CISA KEV, or score >= 80 | 7 days |
+| P2 | Score 60-79 | 30 days |
+| P3 | Score 40-59 | 90 days |
+| P4 | Below 40 | 180 days |
+
+The SLA clock starts at Inspector's *first observed* time. SLAs and alerting
+priorities are Terraform variables.
+
+**What happens to each finding**
+
+- Upserted into DynamoDB with score, priority, the reasons behind the score,
+  SLA due date, and affected packages. This is the system of record for
+  reporting.
+- P1 findings trigger one SNS email. A conditional write guarantees exactly
+  one alert per finding, even though Inspector re-sends update events.
+- When Inspector closes a finding (patched or resource removed), `closed_at`
+  is recorded so time-to-remediate can be measured.
+- Feed outages degrade gracefully: if KEV or EPSS is unreachable, the finding
+  is still recorded with the signals that are available.
+- Findings that existed before the engine was deployed are scored with a
+  one-time backfill: `aws lambda invoke --function-name vulnpipe-risk-engine
+  --payload '{"backfill": true}' --cli-binary-format raw-in-base64-out out.json`
+
+The scoring and handler logic are covered by unit tests that run on every
+push, with no AWS account or network access needed.
+
 ## Tooling
 
-Trivy 0.74.0 (pinned) · GitHub Actions · Docker · Python ·
-Terraform, Amazon Inspector, AWS Security Hub, EventBridge, Lambda,
-DynamoDB, SNS (planned phases)
+Trivy 0.74.0 (pinned) · GitHub Actions · Docker · Python 3.13 · pytest ·
+Terraform · Amazon Inspector · AWS Security Hub · EventBridge · Lambda ·
+DynamoDB · SNS · KMS · FIRST EPSS · CISA KEV
 
 ## Author
 

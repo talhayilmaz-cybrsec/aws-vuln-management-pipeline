@@ -33,3 +33,15 @@ variable "target_instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+variable "sla_days" {
+  description = "Remediation SLA in days per priority"
+  type        = map(number)
+  default     = { P1 = 7, P2 = 30, P3 = 90, P4 = 180 }
+}
+
+variable "alert_priorities" {
+  description = "Priorities that trigger an SNS alert"
+  type        = list(string)
+  default     = ["P1"]
+}
