@@ -1,8 +1,6 @@
-# INTENTIONALLY VULNERABLE versions - demo scan target only. Do not reuse.
-# PyYAML 5.3.1   -> CVE-2020-14343 (arbitrary code execution, CVSS 9.8)
-# Werkzeug 2.0.1 -> multiple CVEs fixed in later 2.x/3.x releases
-# requests 2.25.1 -> CVE-2023-32681 (proxy credential leak)
-Flask==2.0.1
-Werkzeug==2.0.1
-requests==2.25.1
-PyYAML==5.3.1
+# Remediated: every package upgraded past its known CVEs.
+# Before: Flask 2.0.1, Werkzeug 2.0.1, requests 2.25.1, PyYAML 5.3.1 (CVE-2020-14343, CVSS 9.8)
+Flask==3.1.2
+Werkzeug==3.1.3
+requests==2.32.5
+PyYAML==6.0.3

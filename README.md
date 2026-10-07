@@ -53,19 +53,21 @@ Every finding, at all severities, is uploaded to the repository's
 **Security → Code scanning** tab as SARIF, so the gate only decides what
 blocks; nothing is hidden.
 
-### Intentionally vulnerable demo target
+### Before and after
 
-`app/` contains a minimal Flask service packaged in a deliberately outdated
-image so the pipeline has real findings to act on:
+`app/` contains a minimal Flask service. It was first committed in a
+deliberately outdated image so the pipeline had real findings to act on:
 
 - `python:3.8-slim-buster`: end-of-life Python on end-of-life Debian 10
 - `PyYAML 5.3.1`: CVE-2020-14343, arbitrary code execution (CVSS 9.8)
 - Outdated `Werkzeug` and `requests` with known CVEs
 - Container runs as root (Trivy `DS-0002`)
 
-The first pipeline run is expected to **fail**. Remediating the image
-(supported base image, patched dependencies, non-root user) makes it pass,
-demonstrating the gate end to end.
+**Before:** the gates blocked the build (CRITICAL CVEs, root container).
+
+**After** (remediation commit): `python:3.13-slim` base, every dependency
+upgraded past its CVEs, an unprivileged `appuser`, and a `HEALTHCHECK`. The
+same gates pass. Both runs remain in the Actions history as evidence.
 
 ## Phase 2: AWS infrastructure
 
