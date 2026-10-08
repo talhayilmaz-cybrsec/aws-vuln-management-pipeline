@@ -46,6 +46,32 @@ Deployed against one deliberately outdated Ubuntu 20.04 instance:
 | CVE-2025-6965 | 7.7 | 0.714 | No | 86 | **P1** | 71% probability of exploitation in 30 days |
 | CVE-2026-64564 | 9.8 | 0.014 | No | 77 | P2 | Near-maximum CVSS, but little exploitation evidence |
 
+### Screenshots
+
+**Amazon Inspector findings on the scan target** (3,206 package vulnerabilities, ranked by CVSS severity only)
+
+![Inspector findings](docs/screenshots/01-inspector-findings.png)
+
+**Risk engine output: the 15 highest-risk findings.** Columns: CVE, priority, risk score, CVSS, EPSS, in CISA KEV.
+
+![Risk scores](docs/screenshots/02-risk-scores.png)
+
+**Priority distribution: 3,206 findings, 7 that need action this week**
+
+![Priority summary](docs/screenshots/03-priority-summary.png)
+
+**P1 alert email**, explaining why the finding is P1 and what to upgrade
+
+![P1 alert](docs/screenshots/04-p1-alert-email.png)
+
+**Weekly metrics report email**
+
+![Weekly report](docs/screenshots/05-weekly-report-email.png)
+
+**GitHub OIDC identity provider in AWS IAM** (no long-lived access keys)
+
+![GitHub OIDC](docs/screenshots/06-github-oidc.png)
+
 ## Phases
 
 | Phase | Scope | Status |
