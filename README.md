@@ -6,39 +6,55 @@ scanned continuously with Amazon Inspector, and a Python risk engine
 prioritizes CVEs using CVSS, EPSS, and the CISA Known Exploited
 Vulnerabilities (KEV) catalog instead of CVSS alone.
 
-> **Status:** Phases 1-3 deployed and verified end to end. Phase 4 (reporting)
-> code complete.
+> **Status:** Complete. All phases were deployed and verified end to end on
+> AWS, then torn down. Everything can be redeployed from this repository.
 
 ## Architecture
 
 ```
- Developer push
-      │
-      ▼
- GitHub Actions ──► Trivy image scan ──► Trivy config scan
-      │                    │                    │
-      │             SARIF → GitHub Security tab │
-      │                    └──── gate: block on CRITICAL / misconfig
-      ▼
- AWS (Terraform)                                        [planned]
- Amazon Inspector ─► Security Hub ─► EventBridge ─► Lambda risk engine
-   (EC2, ECR, Lambda)                                    │
-                                    CVSS + EPSS + CISA KEV + asset context
-                                                         │
-                                 ┌───────────────────────┼──────────────┐
-                                 ▼                       ▼              ▼
-                           SNS alert            GitHub Issue (SLA)   DynamoDB
+ git push
+    │
+    ▼
+ GitHub Actions ─► Trivy image scan + Trivy config scan ─► gate (block on CRITICAL)
+    │                     └─► SARIF ─► GitHub Security tab
+    │  OIDC (short-lived credentials, no stored keys)
+    ▼
+ AWS, deployed with Terraform
+ ┌──────────────────────────────────────────────────────────────────────────┐
+ │ Amazon Inspector ──finding event──► EventBridge ──► Lambda: risk engine   │
+ │  (EC2, ECR, Lambda)                                  │  CVSS + EPSS +     │
+ │        │                                             │  CISA KEV + asset  │
+ │        └──► Security Hub (aggregation)               │  context           │
+ │                                                      ├─► DynamoDB (record)│
+ │                                                      └─► SNS (P1 alert)   │
+ │ EventBridge schedule (Mondays) ──► Lambda: report ──► SNS (metrics email) │
+ └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Results
+
+Deployed against one deliberately outdated Ubuntu 20.04 instance:
+
+- Inspector reported **3,206** package vulnerabilities on a single server.
+- The risk engine scored all of them and flagged **7 as P1**: 526 P2,
+  2,663 P3, 10 P4. Each P1 produced exactly one alert email.
+- Examples of risk-based prioritization versus CVSS alone:
+
+| CVE | CVSS | EPSS | In CISA KEV | Risk | Priority | Why |
+|---|---|---|---|---|---|---|
+| CVE-2025-39964 | 5.5 | 0.013 | Yes | 82 | **P1** | Medium CVSS, but actively exploited |
+| CVE-2025-6965 | 7.7 | 0.714 | No | 86 | **P1** | 71% probability of exploitation in 30 days |
+| CVE-2026-64564 | 9.8 | 0.014 | No | 77 | P2 | Near-maximum CVSS, but little exploitation evidence |
 
 ## Phases
 
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Pre-deployment scanning: Trivy in GitHub Actions, SARIF upload, build gates | Done |
-| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Deployed |
-| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Deployed |
-| 4 | Weekly metrics report: open by priority, SLA compliance, MTTR | Code complete |
-| 5 | Documentation, screenshots, teardown | Planned |
+| 2 | AWS infrastructure in Terraform, GitHub OIDC (no stored keys) | Done |
+| 3 | Risk engine Lambda: CVSS + EPSS + KEV + asset context, SLA routing | Done |
+| 4 | Weekly metrics report: open by priority, SLA compliance, MTTR | Done |
+| 5 | Documentation, teardown | Done |
 
 ## Phase 1: Pre-deployment scanning
 
@@ -158,6 +174,37 @@ findings table and emails the program-level metrics:
 
 MTTR is measured from Inspector's *first observed* time to the moment
 Inspector closes the finding, both recorded by the risk engine.
+
+## Deploy and tear down
+
+**Deploy**
+
+1. In AWS CloudShell: `cd bootstrap && terraform init && terraform apply`
+   (creates the state bucket and the GitHub OIDC role).
+2. Set the repository variables `AWS_ROLE_ARN`, `TF_STATE_BUCKET`
+   (from the bootstrap outputs) and `ALERT_EMAIL`.
+3. Actions → **Deploy Infrastructure** → `apply`. Confirm the SNS email
+   subscription.
+4. Optional: score findings that predate the engine with the backfill
+   command in Phase 3.
+
+**Tear down**
+
+1. Actions → **Deploy Infrastructure** → `destroy`.
+2. In CloudShell: empty the versioned state bucket, then `terraform destroy`
+   in `bootstrap/` (its bucket is protected with `prevent_destroy`, which
+   must be lifted deliberately).
+
+**Lessons from running it**
+
+- GitHub's OIDC subject claim now carries immutable numeric owner and
+  repository IDs; the first role assumption was rejected until the trust
+  policy matched them. Diagnosed by printing the token's claims, not by
+  guessing.
+- A single end-of-life server produced 3,206 findings, which is the case for
+  risk-based prioritization in one number.
+- Disabling Inspector can exceed Terraform's default 5-minute timeout;
+  the enabler now has explicit timeouts.
 
 ## Tooling
 
